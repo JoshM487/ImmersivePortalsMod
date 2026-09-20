@@ -201,4 +201,59 @@ for src_root in source_roots:
         if new_text != text:
             p.write_text(new_text, encoding="utf-8")
 
+
+# Direct 26.3 call-shape migrations.
+for src_root in source_roots:
+    if not src_root.exists():
+        continue
+    for p in src_root.rglob("*.java"):
+        text = p.read_text(encoding="utf-8")
+        new_text = text
+
+        # Shader transparency is a static Minecraft query again in 26.3.
+        new_text = new_text.replace("client.useShaderTransparency()", "Minecraft.useShaderTransparency()")
+        new_text = new_text.replace("mc.useShaderTransparency()", "Minecraft.useShaderTransparency()")
+
+        # PoseStack renamed the quaternion operation to rotate(Quaternionfc).
+        new_text = re.sub(r"(\b\w+)\.mulPose\(([^;\n]*toMcQuaternion\(\)[^;\n]*)\)",
+                          r"\1.rotate(\2)", new_text)
+        new_text = re.sub(r"(\b\w+)\.mulPose\(([^;\n]*Quaternion[^;\n]*)\)",
+                          r"\1.rotate(\2)", new_text)
+
+        # 26.3 TextureTarget takes explicit color/depth formats.
+        new_text = new_text.replace(
+            ", true, GpuFormat.RGBA8_UNORM)",
+            ", GpuFormat.RGBA8_UNORM, GpuFormat.D32_FLOAT)"
+        )
+        new_text = new_text.replace(
+            ", false, GpuFormat.RGBA8_UNORM)",
+            ", GpuFormat.RGBA8_UNORM, null)"
+        )
+        new_text = new_text.replace(
+            ", true, com.mojang.renderpearl.api.GpuFormat.RGBA8_UNORM)",
+            ", com.mojang.renderpearl.api.GpuFormat.RGBA8_UNORM, com.mojang.renderpearl.api.GpuFormat.D32_FLOAT)"
+        )
+        new_text = new_text.replace(
+            ", false, com.mojang.renderpearl.api.GpuFormat.RGBA8_UNORM)",
+            ", com.mojang.renderpearl.api.GpuFormat.RGBA8_UNORM, null)"
+        )
+
+        # RenderPass.setPipeline takes a compiled pipeline in 26.3. The previous
+        # generic regex intentionally missed nested expressions; cover the known
+        # portal call shapes explicitly and then a conservative one-line fallback.
+        known_pipeline_exprs = [
+            "PORTAL_STRAIGHT_COPY",
+            "sel.pipeline()",
+            "PortalRenderTypes.portalCompositeBlit()",
+            "PortalRenderTypes.portalScreenDepthClear()",
+            "pipeline",
+        ]
+        for expr in known_pipeline_exprs:
+            new_text = new_text.replace(
+                f"pass.setPipeline({expr});",
+                f"pass.setPipeline(RenderSystem.getCompiledPipeline({expr}));"
+            )
+
+        if new_text != text:
+            p.write_text(new_text, encoding="utf-8")
 print("Applied Minecraft 26.3 baseline patch")
