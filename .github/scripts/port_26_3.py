@@ -256,4 +256,30 @@ for src_root in source_roots:
 
         if new_text != text:
             p.write_text(new_text, encoding="utf-8")
+
+# 26.3 RenderPearl keeps the OpenGL backend package-private behind FrontendGpuDevice.
+# Restore only the access Immersive Portals needs for live FBO/stencil resolution.
+aw = root / "common/src/main/resources/seamlessportals.accesswidener"
+aws = aw.read_text(encoding="utf-8")
+extra_aw = [
+    "accessible class com/mojang/renderpearl/backend/opengl/GlDevice",
+    "accessible field com/mojang/renderpearl/frontend/FrontendGpuDevice backend Lcom/mojang/renderpearl/backend/api/GpuDeviceBackend;",
+]
+for line in extra_aw:
+    if line not in aws:
+        aws += "\\n" + line
+aw.write_text(aws + ("\\n" if not aws.endswith("\\n") else ""), encoding="utf-8")
+
+# GpuDevice is now an interface backed by FrontendGpuDevice; reach the widened backend field.
+for src_root in source_roots:
+    if not src_root.exists():
+        continue
+    for p in src_root.rglob("*.java"):
+        text = p.read_text(encoding="utf-8")
+        new_text = text.replace(
+            "RenderSystem.getDevice().backend",
+            "((com.mojang.renderpearl.frontend.FrontendGpuDevice) RenderSystem.getDevice()).backend"
+        )
+        if new_text != text:
+            p.write_text(new_text, encoding="utf-8")
 print("Applied Minecraft 26.3 baseline patch")
