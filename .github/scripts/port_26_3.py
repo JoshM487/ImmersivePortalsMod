@@ -77,4 +77,71 @@ for dead_entry in [
     aws = aws.replace(dead_entry, "")
 aw.write_text(aws, encoding="utf-8")
 
+
+# 26.3 moved the GPU abstraction from Blaze3D into RenderPearl. Most of these
+# are package-only moves, so migrate them across the full modern source tree
+# before tackling the smaller set of signature/semantic changes.
+source_roots = [
+    root / "common/src/main/java",
+    root / "fabric/src/main/java",
+]
+moves = {
+    "com.mojang.blaze3d.GpuFormat": "com.mojang.renderpearl.api.GpuFormat",
+    "com.mojang.blaze3d.IndexType": "com.mojang.renderpearl.api.pipeline.IndexType",
+    "com.mojang.blaze3d.PrimitiveTopology": "com.mojang.renderpearl.api.pipeline.PrimitiveTopology",
+    "com.mojang.blaze3d.buffers.GpuBufferSlice": "com.mojang.renderpearl.api.buffers.GpuBufferSlice",
+    "com.mojang.blaze3d.buffers.GpuBuffer": "com.mojang.renderpearl.api.buffers.GpuBuffer",
+    "com.mojang.blaze3d.buffers.GpuFence": "com.mojang.renderpearl.api.commands.GpuFence",
+    "com.mojang.blaze3d.opengl.": "com.mojang.renderpearl.backend.opengl.",
+    "com.mojang.blaze3d.textures.": "com.mojang.renderpearl.api.textures.",
+
+    "com.mojang.blaze3d.pipeline.BindGroupLayout": "com.mojang.renderpearl.api.pipeline.BindGroupLayout",
+    "com.mojang.blaze3d.pipeline.BlendEquation": "com.mojang.renderpearl.api.pipeline.BlendEquation",
+    "com.mojang.blaze3d.pipeline.BlendFunction": "com.mojang.renderpearl.api.pipeline.BlendFunction",
+    "com.mojang.blaze3d.pipeline.CompiledRenderPipeline": "com.mojang.renderpearl.api.pipeline.CompiledRenderPipeline",
+    "com.mojang.blaze3d.pipeline.DepthStencilState": "com.mojang.renderpearl.api.pipeline.DepthStencilState",
+    "com.mojang.blaze3d.pipeline.RenderPipeline": "com.mojang.renderpearl.api.pipeline.RenderPipeline",
+
+    "com.mojang.blaze3d.platform.BlendFactor": "com.mojang.renderpearl.api.pipeline.BlendFactor",
+    "com.mojang.blaze3d.platform.BlendOp": "com.mojang.renderpearl.api.pipeline.BlendOp",
+    "com.mojang.blaze3d.platform.CompareOp": "com.mojang.renderpearl.api.pipeline.CompareOp",
+    "com.mojang.blaze3d.platform.PolygonMode": "com.mojang.renderpearl.api.pipeline.PolygonMode",
+
+    "com.mojang.blaze3d.shaders.GpuDebugOptions": "com.mojang.renderpearl.api.device.GpuDebugOptions",
+    "com.mojang.blaze3d.shaders.ShaderSource": "com.mojang.renderpearl.api.pipeline.ShaderSource",
+    "com.mojang.blaze3d.shaders.ShaderType": "com.mojang.renderpearl.api.pipeline.ShaderType",
+    "com.mojang.blaze3d.shaders.UniformType": "com.mojang.renderpearl.api.pipeline.UniformType",
+
+    "com.mojang.blaze3d.systems.CommandEncoderBackend": "com.mojang.renderpearl.backend.api.CommandEncoderBackend",
+    "com.mojang.blaze3d.systems.CommandEncoder": "com.mojang.renderpearl.api.commands.CommandEncoder",
+    "com.mojang.blaze3d.systems.DeviceFeatures": "com.mojang.renderpearl.api.device.DeviceFeatures",
+    "com.mojang.blaze3d.systems.DeviceInfo": "com.mojang.renderpearl.api.device.DeviceInfo",
+    "com.mojang.blaze3d.systems.DeviceLimits": "com.mojang.renderpearl.api.device.DeviceLimits",
+    "com.mojang.blaze3d.systems.DeviceType": "com.mojang.renderpearl.api.device.DeviceType",
+    "com.mojang.blaze3d.systems.GpuDeviceBackend": "com.mojang.renderpearl.backend.api.GpuDeviceBackend",
+    "com.mojang.blaze3d.systems.GpuDevice": "com.mojang.renderpearl.api.device.GpuDevice",
+    "com.mojang.blaze3d.systems.GpuQueryPool": "com.mojang.renderpearl.api.commands.GpuQueryPool",
+    "com.mojang.blaze3d.systems.GpuQuery": "com.mojang.renderpearl.api.commands.GpuQuery",
+    "com.mojang.blaze3d.systems.RenderPassDescriptor": "com.mojang.renderpearl.api.commands.RenderPassDescriptor",
+    "com.mojang.blaze3d.systems.RenderPass": "com.mojang.renderpearl.api.commands.RenderPass",
+
+    "com.mojang.blaze3d.vertex.VertexFormatElement": "com.mojang.renderpearl.api.vertex.VertexFormatElement",
+    "com.mojang.blaze3d.vertex.VertexFormat": "com.mojang.renderpearl.api.vertex.VertexFormat",
+
+    "net.minecraft.world.level.levelgen.DensityFunctions": "net.minecraft.world.level.levelgen.densityfunction.DensityFunctions",
+    "net.minecraft.world.level.levelgen.DensityFunction": "net.minecraft.world.level.levelgen.densityfunction.DensityFunction",
+    "net.minecraft.world.level.block.RedStoneWireBlock": "net.minecraft.world.level.block.RedstoneWireBlock",
+    "RedStoneWireBlock": "RedstoneWireBlock",
+}
+for src_root in source_roots:
+    if not src_root.exists():
+        continue
+    for p in src_root.rglob("*.java"):
+        text = p.read_text(encoding="utf-8")
+        new_text = text
+        for old, new in moves.items():
+            new_text = new_text.replace(old, new)
+        if new_text != text:
+            p.write_text(new_text, encoding="utf-8")
+
 print("Applied Minecraft 26.3 baseline patch")
