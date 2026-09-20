@@ -64,4 +64,17 @@ replace("fabric/src/main/resources/fabric.mod.json",
         '"cloth-config": ">=26.2"',
         '"cloth-config": ">=26.3"')
 
+
+# 26.3 renderer internals changed. Remove 26.2-only wideners first; if source still
+# needs an access, the Java compiler will point at the replacement API explicitly.
+aw = root / "common/src/main/resources/seamlessportals.accesswidener"
+aws = aw.read_text(encoding="utf-8")
+for dead_entry in [
+    "accessible method net/minecraft/client/renderer/RenderPipelines register (Lcom/mojang/blaze3d/pipeline/RenderPipeline;)Lcom/mojang/blaze3d/pipeline/RenderPipeline;\n",
+    "accessible class com/mojang/blaze3d/opengl/GlDevice\n",
+    "accessible field com/mojang/blaze3d/systems/GpuDevice backend Lcom/mojang/blaze3d/systems/GpuDeviceBackend;\n",
+]:
+    aws = aws.replace(dead_entry, "")
+aw.write_text(aws, encoding="utf-8")
+
 print("Applied Minecraft 26.3 baseline patch")
