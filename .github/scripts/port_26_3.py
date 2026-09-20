@@ -159,7 +159,7 @@ for src_root in source_roots:
         )
         new_text = new_text.replace(
             ".withBindGroupLayout(BindGroupLayouts.MATRICES_PROJECTION)",
-            ".withBindGroupLayout(BindGroupLayouts.PROJECTION)\\n"
+            ".withBindGroupLayout(BindGroupLayouts.PROJECTION)\n"
             "                .withBindGroupLayout(BindGroupLayouts.DYNAMIC_TRANSFORMS)"
         )
         new_text = new_text.replace(
