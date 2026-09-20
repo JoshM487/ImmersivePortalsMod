@@ -144,4 +144,61 @@ for src_root in source_roots:
         if new_text != text:
             p.write_text(new_text, encoding="utf-8")
 
+
+# Additional 26.3 render API changes that preserve behavior.
+for src_root in source_roots:
+    if not src_root.exists():
+        continue
+    for p in src_root.rglob("*.java"):
+        text = p.read_text(encoding="utf-8")
+        new_text = text
+
+        new_text = new_text.replace(
+            "com.mojang.blaze3d.pipeline.ColorTargetState",
+            "com.mojang.renderpearl.api.pipeline.ColorTargetState"
+        )
+        new_text = new_text.replace(
+            ".withBindGroupLayout(BindGroupLayouts.MATRICES_PROJECTION)",
+            ".withBindGroupLayout(BindGroupLayouts.PROJECTION)\\n"
+            "                .withBindGroupLayout(BindGroupLayouts.DYNAMIC_TRANSFORMS)"
+        )
+        new_text = new_text.replace(
+            ".gameRenderer.gameRenderState().useShaderTransparency()",
+            ".useShaderTransparency()"
+        )
+        # The previous replacement yields mc.useShaderTransparency()/client.useShaderTransparency();
+        # normalize to the static 26.3 home.
+        new_text = re.sub(
+            r"\\b(?:mc|client)\\.useShaderTransparency\\(\\)",
+            "net.minecraft.client.Minecraft.useShaderTransparency()",
+            new_text
+        )
+
+        # RenderPass sampler bindings became generic uniform bindings.
+        new_text = new_text.replace(".bindTexture(", ".setUniform(")
+
+        # RenderPass now consumes a CompiledRenderPipeline. Wrap simple one-line pipeline
+        # submissions through RenderSystem's cache, which is the vanilla 26.3 path.
+        new_text = re.sub(
+            r"(\\b\\w+\\.setPipeline\\()([^;\\n]+)(\\);)",
+            lambda m: (
+                m.group(0) if "getCompiledPipeline(" in m.group(2)
+                else m.group(1) + "RenderSystem.getCompiledPipeline(" + m.group(2) + ")" + m.group(3)
+            ),
+            new_text
+        )
+
+        # Own mixin class names intentionally keep Mojang's old spelling in their filenames.
+        new_text = new_text.replace(
+            "class MixinRedstoneWireBlockSeamAuthority",
+            "class MixinRedStoneWireBlockSeamAuthority"
+        )
+        new_text = new_text.replace(
+            "class MixinRedstoneWireBlockSeamSignal",
+            "class MixinRedStoneWireBlockSeamSignal"
+        )
+
+        if new_text != text:
+            p.write_text(new_text, encoding="utf-8")
+
 print("Applied Minecraft 26.3 baseline patch")
