@@ -3,27 +3,41 @@ name: Build 26.3
 on:
   push:
     branches: [ "mc26.3-port" ]
-  pull_request:
-    branches: [ "1.21" ]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v5
+      - name: Checkout port patches
+        uses: actions/checkout@v4
+
+      - name: Set up Java 25
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '25'
-      - uses: gradle/actions/setup-gradle@v4
-      - name: Build
+
+      - name: Clone modern 26.2 source baseline
+        run: git clone --depth 1 --branch mc-26.2-main https://github.com/fmpapierz/SeamlessPortals.git upstream
+
+      - name: Apply 26.3 port patches
+        run: python3 .github/scripts/port_26_3.py upstream
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build Fabric 26.3
+        working-directory: upstream
         run: |
           chmod +x gradlew
-          ./gradlew build --stacktrace
-      - uses: actions/upload-artifact@v4
+          ./gradlew :fabric:build --stacktrace --console=plain
+
+      - name: Upload production jars
         if: always()
+        uses: actions/upload-artifact@v4
         with:
           name: immersive-portals-26.3-build
-          path: build/libs/*.jar
+          path: |
+            upstream/fabric/build/libs/*.jar
           if-no-files-found: warn
