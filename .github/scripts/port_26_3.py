@@ -1603,4 +1603,24 @@ if p.exists():
     )
     p.write_text(t, encoding="utf-8")
 
+
+# --- 26.3 FrameBufferCache.createFbo gained mipOffset ---
+p = root / "common/src/main/java/com/warwa/seamlessportals/mixin/client/stencil/RenderTargetMixin.java"
+if p.exists():
+    t = p.read_text(encoding="utf-8")
+    t = t.replace(
+        "FrameBufferAttachment depthAttachment,\n            CallbackInfoReturnable<Integer> cir)",
+        "FrameBufferAttachment depthAttachment,\n            int mipOffset,\n            CallbackInfoReturnable<Integer> cir)"
+    )
+    # Match the mip level vanilla attached for this framebuffer rather than forcing level 0.
+    t = t.replace(
+        "GL30.GL_DEPTH_STENCIL_ATTACHMENT, GL30.GL_TEXTURE_2D, depthId, 0);",
+        "GL30.GL_DEPTH_STENCIL_ATTACHMENT, GL30.GL_TEXTURE_2D, depthId, depthAttachment.fboMipLevel() + mipOffset);"
+    )
+    t = t.replace(
+        "GL30.GL_DEPTH_ATTACHMENT, GL30.GL_TEXTURE_2D, depthId, 0);",
+        "GL30.GL_DEPTH_ATTACHMENT, GL30.GL_TEXTURE_2D, depthId, depthAttachment.fboMipLevel() + mipOffset);"
+    )
+    p.write_text(t, encoding="utf-8")
+
 print("Applied Minecraft 26.3 baseline patch")
