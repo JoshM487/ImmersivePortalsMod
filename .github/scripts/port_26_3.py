@@ -633,4 +633,321 @@ public final class SeamHandInLevelProbe {
 """)
 
 
+
+# --- 26.3 exact API reconciliation, pass 2 ---
+
+# ServerboundUseItemOnPacket became a record; use record accessors and the renamed swing source.
+p = root / "common/src/main/java/qouteall/imm_ptl/core/block_manipulation/BlockManipulationServer.java"
+if p.exists():
+    t = p.read_text(encoding="utf-8")
+    t = t.replace("packet.getHitResult()", "packet.hitResult()")
+    t = t.replace("packet.getSequence()", "packet.sequence()")
+    t = t.replace("packet.getHand()", "packet.hand()")
+    t = t.replace("InteractionResult.SwingSource.SERVER", "InteractionResult.SwingSource.SERVER_ONLY")
+    t = t.replace(
+        "player.swing(hand, true);",
+        "player.swing(hand, net.minecraft.world.entity.SwingAnimation.DEFAULT, true);"
+    )
+    p.write_text(t, encoding="utf-8")
+
+# 26.3 environment colors are already Vector3fc values; do not convert them from packed RGB.
+for rel in [
+    "common/src/main/java/qouteall/imm_ptl/core/render/context_management/DimensionRenderHelper.java",
+    "common/src/main/java/com/warwa/seamlessportals/render/DimensionRenderHelper.java",
+]:
+    p = root / rel
+    if p.exists():
+        t = p.read_text(encoding="utf-8")
+        t = re.sub(
+            r"ARGB\.vector3fFromRGB24\(\s*(virtualCamera\.attributeProbe\(\)\.getValue\(\s*EnvironmentAttributes\.(?:BLOCK_LIGHT_TINT|SKY_LIGHT_COLOR|AMBIENT_LIGHT_COLOR|NIGHT_VISION_COLOR),\s*partialTicks\))\s*\)",
+            r"\1",
+            t,
+            flags=re.S
+        )
+        p.write_text(t, encoding="utf-8")
+
+# Entity invulnerability timer is private in 26.3 but has public accessors.
+for rel in [
+    "common/src/main/java/qouteall/imm_ptl/core/teleportation/ServerTeleportationManager.java",
+    "common/src/main/java/com/warwa/seamlessportals/entity/PortalTeleporter.java",
+]:
+    p = root / rel
+    if p.exists():
+        t = p.read_text(encoding="utf-8")
+        t = re.sub(
+            r"(\b\w+)\.invulnerableTime\s*=\s*(\b\w+)\.invulnerableTime\s*;",
+            r"\1.setInvulnerableTime(\2.getInvulnerableTime());",
+            t
+        )
+        p.write_text(t, encoding="utf-8")
+
+# TextureTarget constructor now takes explicit nullable color/depth formats.
+p = root / "common/src/main/java/qouteall/imm_ptl/core/render/SecondaryFrameBuffer.java"
+if p.exists():
+    t = p.read_text(encoding="utf-8")
+    t = t.replace(
+        'width, height,\n                true,//has depth attachment\n                GpuFormat.RGBA8_UNORM',
+        'width, height,\n                GpuFormat.RGBA8_UNORM,\n                GpuFormat.D32_FLOAT'
+    )
+    p.write_text(t, encoding="utf-8")
+
+# Link opening moved to Blaze3D and ConfirmLinkScreen now takes URI directly.
+p = root / "common/src/main/java/qouteall/imm_ptl/core/CHelper.java"
+if p.exists():
+    t = p.read_text(encoding="utf-8")
+    if "import com.mojang.blaze3d.Blaze3D;" not in t:
+        t = t.replace("package qouteall.imm_ptl.core;\n", "package qouteall.imm_ptl.core;\n\nimport com.mojang.blaze3d.Blaze3D;\n")
+    t = t.replace("Util.getPlatform().openUri(new URI(link));", "Blaze3D.openUri(new URI(link));")
+    t = t.replace("            link, true\n", "            URI.create(link), true\n")
+    p.write_text(t, encoding="utf-8")
+
+# CommandSourceStack's entity-aware constructor no longer accepts explicit name/display-name.
+p = root / "common/src/main/java/qouteall/imm_ptl/core/McHelper.java"
+if p.exists():
+    t = p.read_text(encoding="utf-8")
+    t = t.replace(
+        """            PermissionSet.NO_PERMISSIONS,
+            commandSender.getName().getString(),
+            commandSender.getDisplayName(),
+            ((ServerLevel) commandSender.level()).getServer(),
+            commandSender""",
+        """            PermissionSet.NO_PERMISSIONS,
+            ((ServerLevel) commandSender.level()).getServer(),
+            commandSender"""
+    )
+    p.write_text(t, encoding="utf-8")
+
+# Record accessors for 26.3 clientbound packets.
+p = root / "common/src/main/java/qouteall/imm_ptl/core/mixin/client/sync/MixinClientPacketListener.java"
+if p.exists():
+    t = p.read_text(encoding="utf-8")
+    t = t.replace("packet.getEntityIds()", "packet.entityIds()")
+    t = t.replace("packet.getX()", "packet.x()")
+    t = t.replace("packet.getZ()", "packet.z()")
+    p.write_text(t, encoding="utf-8")
+
+p = root / "common/src/main/java/com/warwa/seamlessportals/chunk/RedirectedPacketApplier.java"
+if p.exists():
+    t = p.read_text(encoding="utf-8")
+    t = t.replace("p.innerPacket().getX()", "p.innerPacket().x()")
+    t = t.replace("p.innerPacket().getZ()", "p.innerPacket().z()")
+    p.write_text(t, encoding="utf-8")
+
+# InterpolationHandler now uses PositionPath and exposes target() instead of position/yRot/xRot.
+p = root / "common/src/main/java/com/warwa/seamlessportals/passthrough/SeamVisualCarryover.java"
+if p.exists():
+    t = p.read_text(encoding="utf-8")
+    t = t.replace(
+        "(interp != null && interp.hasActiveInterpolation()) ? interp.position() : null",
+        "(interp != null && interp.hasActiveInterpolation() && interp.target() != null) ? interp.target().position() : null"
+    )
+    t = t.replace(
+        "interp.interpolateTo(serverPos, fresh.getYRot(), fresh.getXRot());",
+        "interp.interpolateTo(net.minecraft.world.entity.PositionPath.of(serverPos), fresh.getYRot(), fresh.getXRot(), true);"
+    )
+    p.write_text(t, encoding="utf-8")
+
+p = root / "common/src/main/java/com/warwa/seamlessportals/chunk/RemoteEntityApplier.java"
+if p.exists():
+    t = p.read_text(encoding="utf-8")
+    t = t.replace(
+        """interp.interpolateTo(
+                new net.minecraft.world.phys.Vec3(p.x(), p.y(), p.z()),
+                p.yRot(), p.xRot());""",
+        """interp.interpolateTo(
+                net.minecraft.world.entity.PositionPath.of(new net.minecraft.world.phys.Vec3(p.x(), p.y(), p.z())),
+                p.yRot(), p.xRot(), true);"""
+    )
+    p.write_text(t, encoding="utf-8")
+
+p = root / "common/src/main/java/qouteall/imm_ptl/core/teleportation/ClientTeleportationManager.java"
+if p.exists():
+    t = p.read_text(encoding="utf-8")
+    t = t.replace(
+        """if (interp != null && interp.hasActiveInterpolation()) {
+                interp.interpolateTo(
+                    p.transformPoint(interp.position()), interp.yRot(), interp.xRot());
+            }""",
+        """if (interp != null && interp.hasActiveInterpolation() && interp.target() != null) {
+                var target = interp.target();
+                interp.interpolateTo(
+                    net.minecraft.world.entity.PositionPath.of(p.transformPoint(target.position())),
+                    target.yRot(), target.xRot(), true);
+            }"""
+    )
+    p.write_text(t, encoding="utf-8")
+
+# PoseStack's quaternion operation is rotate(Quaternionfc) in 26.3.
+p = root / "common/src/main/java/qouteall/imm_ptl/core/mc_utils/WireRenderingHelper.java"
+if p.exists():
+    t = p.read_text(encoding="utf-8").replace("matrixStack.mulPose(", "matrixStack.rotate(")
+    p.write_text(t, encoding="utf-8")
+
+# RenderTarget.useDepth is gone; depth attachment presence is authoritative.
+p = root / "common/src/main/java/qouteall/imm_ptl/core/render/GuiPortalRendering.java"
+if p.exists():
+    t = p.read_text(encoding="utf-8").replace(
+        "if (framebuffer.useDepth) {",
+        "if (framebuffer.getDepthTexture() != null) {"
+    )
+    p.write_text(t, encoding="utf-8")
+
+# The old Iris bloom aperture implementation reaches RenderPearl's package-private GL backend.
+# Keep its public hook surface but disable only this shader-pack-specific bloom workaround on 26.3.
+write_stub("common/src/main/java/qouteall/imm_ptl/core/compat/iris_compatibility/IrisBloomApertureMask.java", """package qouteall.imm_ptl.core.compat.iris_compatibility;
+import net.irisshaders.iris.pipeline.CompositeRenderer;
+import org.joml.Matrix4f;
+import net.minecraft.world.phys.Vec3;
+import qouteall.imm_ptl.core.portal.Portal;
+public final class IrisBloomApertureMask {
+    private IrisBloomApertureMask() {}
+    public static void arm(Portal portal, Matrix4f modelView, Matrix4f projection, Vec3 cameraPos, float partialTick) {}
+    public static void disarmAndReport() {}
+    public static void onCompositePassBoundary(CompositeRenderer renderer, int i) {}
+    public static void teardown() {}
+}
+""")
+
+# Sodium's private destination-chunk arm hook changed again in 0.9.2. Core rendering has a
+# vanilla fallback path, so disable this optimization until the runtime pass is green.
+p = root / "common/src/main/java/qouteall/imm_ptl/core/compat/sodium_compatibility/SodiumInterface.java"
+if p.exists():
+    t = p.read_text(encoding="utf-8")
+    marker2 = "        public boolean ip_armDestChunkRenders("
+    if marker2 in t:
+        a = t.index(marker2)
+        brace = t.index("{", a)
+        depth = 0
+        end = None
+        for i in range(brace, len(t)):
+            if t[i] == "{": depth += 1
+            elif t[i] == "}":
+                depth -= 1
+                if depth == 0:
+                    end = i + 1
+                    break
+        header = t[a:brace+1]
+        t = t[:a] + header + "\n            return false;\n        }" + t[end:]
+    p.write_text(t, encoding="utf-8")
+
+# 26.3 chunk packets expose record accessors and ClientChunkCache accepts the packet-data object.
+# Update our two custom cache subclasses to the new override and keep old raw-buffer overloads inert.
+for rel in [
+    "common/src/main/java/qouteall/imm_ptl/core/chunk_loading/ImmPtlClientChunkMap.java",
+    "common/src/main/java/com/warwa/seamlessportals/client/SeamlessClientChunkMap.java",
+]:
+    p = root / rel
+    if not p.exists():
+        continue
+    t = p.read_text(encoding="utf-8")
+    # Remove @Override only from the old raw-buffer overload.
+    t = t.replace(
+        """    @Override
+    public @Nullable LevelChunk replaceWithPacketData(
+        int x, int z,
+        FriendlyByteBuf buf, Map<Heightmap.Types, long[]> heightmaps,""",
+        """    public @Nullable LevelChunk replaceWithPacketData(
+        int x, int z,
+        FriendlyByteBuf buf, Map<Heightmap.Types, long[]> heightmaps,"""
+    )
+    t = t.replace(
+        """    @Override
+    public @Nullable LevelChunk replaceWithPacketData(
+            int chunkX, int chunkZ, FriendlyByteBuf readBuffer,""",
+        """    public @Nullable LevelChunk replaceWithPacketData(
+            int chunkX, int chunkZ, FriendlyByteBuf readBuffer,"""
+    )
+    # Old LevelChunk raw-buffer decode API disappeared. Leave overload for source compatibility only.
+    t = re.sub(
+        r"worldChunk\.replaceWithPacketData\(buf, heightmaps, consumer\);",
+        r"throw new UnsupportedOperationException(\"26.3 raw chunk decode removed\");",
+        t
+    )
+    t = re.sub(
+        r"chunk\.replaceWithPacketData\(readBuffer, heightmaps, blockEntities\);",
+        r"throw new UnsupportedOperationException(\"26.3 raw chunk decode removed\");",
+        t
+    )
+    p.write_text(t, encoding="utf-8")
+
+# Add real 26.3 packet-data overrides to the custom caches.
+p = root / "common/src/main/java/com/warwa/seamlessportals/client/SeamlessClientChunkMap.java"
+if p.exists():
+    t = p.read_text(encoding="utf-8")
+    anchor = "    @Override\n    public void replaceBiomes("
+    if anchor in t and "ClientboundLevelChunkPacketData chunkData)" not in t:
+        method = """    @Override
+    public @Nullable LevelChunk replaceWithPacketData(
+            int chunkX, int chunkZ, ClientboundLevelChunkPacketData chunkData) {
+        long key = ChunkPos.pack(chunkX, chunkZ);
+        ChunkPos pos = new ChunkPos(chunkX, chunkZ);
+        LevelChunk chunk = readMap(m -> m.get(key));
+        if (chunk == null) {
+            chunk = new LevelChunk(this.ccLevel, pos);
+            final LevelChunk added = chunk;
+            modifyMap(m -> m.put(key, added));
+            emitChunkAdded(chunk);
+        }
+        chunk.replaceWithPacketData(chunkX, chunkZ, chunkData);
+        emitRefresh(chunk);
+        this.ccLevel.onChunkLoaded(pos);
+        return chunk;
+    }
+
+"""
+        t = t.replace(anchor, method + anchor)
+    p.write_text(t, encoding="utf-8")
+
+p = root / "common/src/main/java/qouteall/imm_ptl/core/chunk_loading/ImmPtlClientChunkMap.java"
+if p.exists():
+    t = p.read_text(encoding="utf-8")
+    anchor = "    /**\n     * {@link net.minecraft.core.IdMap#byIdOrThrow(int)}"
+    if anchor in t and "ClientboundLevelChunkPacketData chunkData)" not in t:
+        method = """    @Override
+    public @Nullable LevelChunk replaceWithPacketData(
+        int x, int z, ClientboundLevelChunkPacketData chunkData
+    ) {
+        Validate.isTrue(Thread.currentThread() == mainThread);
+        long key = ChunkPos.pack(x, z);
+        LevelChunk chunk = chunkMapForMainThread.get(key);
+        if (chunk == null) {
+            chunk = new LevelChunk(this.level, new ChunkPos(x, z));
+            final LevelChunk added = chunk;
+            modifyChunkMap(m -> m.put(key, added));
+            emitChunkAdded(chunk);
+        }
+        chunk.replaceWithPacketData(x, z, chunkData);
+        emitRefresh(chunk);
+        this.level.onChunkLoaded(new ChunkPos(x, z));
+        O_O.postClientChunkLoadEvent(chunk);
+        SodiumInterface.invoker.onClientChunkLoaded(level, x, z);
+        clientChunkLoadSignal.emit(chunk);
+        return chunk;
+    }
+
+"""
+        t = t.replace(anchor, method + anchor)
+    p.write_text(t, encoding="utf-8")
+
+# Remove the stale chunk-decode guard mixin; 26.3's packet-data object validates decoding itself.
+for mixfile in (root / "common/src/main/resources").glob("*.mixins.json"):
+    try:
+        data = json.loads(mixfile.read_text(encoding="utf-8"))
+    except Exception:
+        continue
+    changed = False
+    for key in ("mixins", "client"):
+        arr = data.get(key)
+        if isinstance(arr, list):
+            filtered = [x for x in arr if "ChunkPacketGuardMixin" not in x]
+            if filtered != arr:
+                data[key] = filtered
+                changed = True
+    if changed:
+        mixfile.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+# Remove its source too so obsolete redirect signatures cannot block compilation.
+p = root / "common/src/main/java/com/warwa/seamlessportals/mixin/client/ChunkPacketGuardMixin.java"
+if p.exists():
+    p.unlink()
+
 print("Applied Minecraft 26.3 baseline patch")
