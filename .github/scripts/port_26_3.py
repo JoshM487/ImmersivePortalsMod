@@ -364,4 +364,150 @@ mix = json.loads(mix_path.read_text(encoding="utf-8"))
 for key in ("mixins", "client"):
     mix[key] = [x for x in mix.get(key, []) if "alternate_dimension" not in x]
 mix_path.write_text(json.dumps(mix, indent=2) + "\n", encoding="utf-8")
+
+
+# --- 26.3 production cleanup / API reconciliation ---
+# The 26.2 hand-port carries a large suite of one-off render probes used while developing
+# its Iris/stencil path. They are not production features and several reach private 26.2
+# OpenGL internals that RenderPearl intentionally hides in 26.3.
+diagnostic_files = [
+    "common/src/main/java/qouteall/imm_ptl/core/compat/iris_compatibility/ShaderpackViewsProbe.java",
+    "common/src/main/java/qouteall/imm_ptl/core/render/TeleportFlashProbe.java",
+    "common/src/main/java/qouteall/imm_ptl/core/render/StageCensusProbe.java",
+    "common/src/main/java/qouteall/imm_ptl/core/render/DrawCallTrace.java",
+    "common/src/main/java/com/warwa/seamlessportals/render/SeamHandStageDiff.java",
+    "common/src/main/java/com/warwa/seamlessportals/render/SeamDestContentProbe.java",
+    "common/src/main/java/com/warwa/seamlessportals/render/SeamHandLocator.java",
+    "common/src/main/java/com/warwa/seamlessportals/render/SeamHandSubmitTap.java",
+    "common/src/main/java/com/warwa/seamlessportals/render/SeamHandInLevelProbe.java",
+]
+for rel in diagnostic_files:
+    p = root / rel
+    if p.exists():
+        p.unlink()
+
+# Strip mixin entries that target the removed development probes.
+for mixfile in (root / "common/src/main/resources").glob("*.mixins.json"):
+    try:
+        data = json.loads(mixfile.read_text(encoding="utf-8"))
+    except Exception:
+        continue
+    changed = False
+    for key in ("mixins", "client", "server"):
+        arr = data.get(key)
+        if isinstance(arr, list):
+            filtered = [
+                x for x in arr
+                if not any(tag in x for tag in (
+                    "ShaderpackViewsProbe", "TeleportFlashProbe", "StageCensusProbe",
+                    "DrawCallTrace", "SeamHandStageDiff", "SeamDestContentProbe",
+                    "SeamHandLocator", "SeamHandSubmitTap", "SeamHandInLevelProbe"
+                ))
+            ]
+            if filtered != arr:
+                data[key] = filtered
+                changed = True
+    if changed:
+        mixfile.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+# 26.3 replaced the previous shader/fabulous query with GameRenderer's current
+# improved-transparency decision.
+for src_root in source_roots:
+    if not src_root.exists():
+        continue
+    for p in src_root.rglob("*.java"):
+        text = p.read_text(encoding="utf-8")
+        new_text = text.replace(
+            "Minecraft.useShaderTransparency()",
+            "Minecraft.getInstance().gameRenderer.useImprovedTransparency()"
+        )
+        new_text = new_text.replace(
+            "net.minecraft.client.Minecraft.useShaderTransparency()",
+            "net.minecraft.client.Minecraft.getInstance().gameRenderer.useImprovedTransparency()"
+        )
+
+        # Pipeline eager-validation moved to RenderSystem's compiled-pipeline cache.
+        new_text = new_text.replace(
+            "if (!RenderSystem.getDevice().precompilePipeline(built).isValid()) {",
+            "if (RenderSystem.getCompiledPipelineNullable(built) == null) {"
+        )
+
+        # RenderSection's old fade bookkeeping setters disappeared; the 26.3 renderer owns
+        # this state internally.
+        new_text = re.sub(r"^\s*\w+\.setFadeDuration\(0L\);\s*$", "", new_text, flags=re.M)
+        new_text = re.sub(r"^\s*\w+\.setWasPreviouslyEmpty\(false\);\s*$", "", new_text, flags=re.M)
+
+        # Avoid relying on an import being present after automated pipeline migration.
+        new_text = new_text.replace(
+            "pass.setPipeline(RenderSystem.getCompiledPipeline(",
+            "pass.setPipeline(com.mojang.blaze3d.systems.RenderSystem.getCompiledPipeline("
+        )
+
+        if new_text != text:
+            p.write_text(new_text, encoding="utf-8")
+
+# BlockPos no longer has a Vec3i-copy constructor.
+bps = root / "common/src/main/java/qouteall/imm_ptl/core/portal/nether_portal/BlockPortalShape.java"
+if bps.exists():
+    t = bps.read_text(encoding="utf-8")
+    t = re.sub(
+        r"new BlockPos\((directions\[[0-9]+\]\.getUnitVec3i\(\))\)",
+        r"BlockPos.ZERO.offset(\1)",
+        t
+    )
+    bps.write_text(t, encoding="utf-8")
+
+# The custom alternate-dimension presets are disabled for the first 26.3 core-port build,
+# so remove their two convenience entries from the dimension-stack UI too.
+dsg = root / "common/src/main/java/qouteall/imm_ptl/peripheral/dim_stack/DimStackGuiController.java"
+if dsg.exists():
+    t = dsg.read_text(encoding="utf-8")
+    t = re.sub(r"^import qouteall\.imm_ptl\.peripheral\.alternate_dimension\.AlternateDimensions;\n", "", t, flags=re.M)
+    t = re.sub(r"^\s*entriesToAdd\.add\(new DimStackEntry\(AlternateDimensions\.[A-Z_]+\)\);\s*$", "", t, flags=re.M)
+    dsg.write_text(t, encoding="utf-8")
+
+# 26.3 uses SDL3 instead of GLFW for OpenGL window creation. Keep the stencil request,
+# but express it through SDL_GL_STENCIL_SIZE (enum value 7).
+gbm = root / "common/src/main/java/com/warwa/seamlessportals/mixin/client/stencil/GlBackendMixin.java"
+if gbm.exists():
+    t = gbm.read_text(encoding="utf-8")
+    t = t.replace("import org.lwjgl.glfw.GLFW;", "import org.lwjgl.sdl.SDLVideo;")
+    t = re.sub(
+        r"GLFW\.glfwWindowHint\(GLFW\.GLFW_STENCIL_BITS,\s*8\);",
+        "SDLVideo.SDL_GL_SetAttribute(7, 8);",
+        t
+    )
+    gbm.write_text(t, encoding="utf-8")
+
+# Core stencil clear: on 26.3 clear the framebuffer already bound by the active main pass.
+# This avoids depending on RenderPearl's deliberately package-private GlDevice implementation.
+rus = root / "common/src/main/java/qouteall/imm_ptl/core/render/renderer/RendererUsingStencil.java"
+if rus.exists():
+    t = rus.read_text(encoding="utf-8")
+    t = t.replace("import com.mojang.renderpearl.backend.opengl.GlDevice;\n", "")
+    t = t.replace("import com.mojang.renderpearl.backend.opengl.GlTextureView;\n", "")
+    start_marker = "        RenderTarget mainRt = client.gameRenderer.mainRenderTarget();"
+    end_marker = "\n\n        // R5 Row 2"
+    if start_marker in t:
+        a = t.index(start_marker)
+        b = t.index(end_marker, a)
+        replacement = """        // 26.3 RenderPearl hides the concrete GL backend. At this point the main
+        // render target is already active, so clear the currently bound draw framebuffer's
+        // stencil attachment directly and preserve all depth/color data.
+        int activeDrawFbo = GlStateManager.getFrameBuffer(GL30.GL_DRAW_FRAMEBUFFER);
+        if (activeDrawFbo != lastResolvedMainFbo) {
+            lastResolvedMainFbo = activeDrawFbo;
+            long now = System.currentTimeMillis();
+            if (now - lastResolverLogMs > 1000) {
+                lastResolverLogMs = now;
+                Helper.log("[26.3] stencil-clear active draw FBO: " + activeDrawFbo);
+            }
+        }
+        GlStateManager._disableScissorTest();
+        GL11.glClearStencil(0);
+        GL11.glClear(GL11.GL_STENCIL_BUFFER_BIT);"""
+        t = t[:a] + replacement + t[b:]
+    rus.write_text(t, encoding="utf-8")
+
+
 print("Applied Minecraft 26.3 baseline patch")
