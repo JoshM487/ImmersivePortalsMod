@@ -301,4 +301,63 @@ replacement = """    public static void renderDestWorld(
 """
 sw = sw[:method_start] + replacement + sw[full_pipeline_marker:]
 swrc.write_text(sw, encoding="utf-8")
+
+# 26.3 removed/reworked the old noise-router/worldgen configuration APIs. Alternate
+# skyland/chaos dimensions are peripheral to portal rendering, so keep the first 26.3
+# release focused on core portals and dimension-stack behavior.
+import shutil, json
+for rel in [
+    "common/src/main/java/qouteall/imm_ptl/peripheral/alternate_dimension",
+    "common/src/main/java/qouteall/imm_ptl/peripheral/mixin/common/alternate_dimension",
+    "common/src/main/java/qouteall/imm_ptl/peripheral/mixin/client/alternate_dimension",
+]:
+    d = root / rel
+    if d.exists():
+        shutil.rmtree(d)
+
+periph = root / "common/src/main/java/qouteall/imm_ptl/peripheral/PeripheralModMain.java"
+pt = periph.read_text(encoding="utf-8")
+pt = re.sub(
+    r"\s*qouteall\.imm_ptl\.peripheral\.alternate_dimension\.FormulaGenerator\.init\(\);",
+    "",
+    pt
+)
+pt = re.sub(
+    r"\s*qouteall\.imm_ptl\.peripheral\.alternate_dimension\.AlternateDimensions\.init\(\);",
+    "",
+    pt
+)
+pt = re.sub(
+    r"\s*qouteall\.dimlib\.api\.DimensionAPI\.suppressExperimentalWarningForNamespace\(\s*\"immersive_portals\"\s*\);",
+    "",
+    pt
+)
+
+def replace_method_with_noop(src, marker):
+    start = src.index(marker)
+    brace = src.index("{", start)
+    depth = 0
+    end = None
+    for i in range(brace, len(src)):
+        if src[i] == "{":
+            depth += 1
+        elif src[i] == "}":
+            depth -= 1
+            if depth == 0:
+                end = i + 1
+                break
+    if end is None:
+        raise SystemExit(f"Could not find end of method {marker}")
+    header = src[start:brace + 1]
+    return src[:start] + header + "\n        // Disabled on 26.3: legacy alternate-dimension worldgen API was removed.\n    }" + src[end:]
+
+pt = replace_method_with_noop(pt, "    public static void registerChunkGenerators(")
+pt = replace_method_with_noop(pt, "    public static void registerBiomeSources(")
+periph.write_text(pt, encoding="utf-8")
+
+mix_path = root / "common/src/main/resources/seamlessportals-ip-peripheral.mixins.json"
+mix = json.loads(mix_path.read_text(encoding="utf-8"))
+for key in ("mixins", "client"):
+    mix[key] = [x for x in mix.get(key, []) if "alternate_dimension" not in x]
+mix_path.write_text(json.dumps(mix, indent=2) + "\n", encoding="utf-8")
 print("Applied Minecraft 26.3 baseline patch")
