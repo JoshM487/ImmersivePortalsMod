@@ -1461,4 +1461,87 @@ if mix_path.exists():
     mix["client"] = [x for x in mix.get("client", []) if x != "client.GlDeviceClipCacheMixin"]
     mix_path.write_text(json.dumps(mix, indent=2) + "\n", encoding="utf-8")
 
+
+# --- 26.3 runtime hardening: remove dead draw probes and fix SDL window stencil hook ---
+
+# These two mixins only fed the deleted DrawCallTrace diagnostic. Keeping them in the
+# config makes Mixin PREPARE try to resolve 26.2's removed Blaze3D OpenGL backend classes.
+mix_path = root / "common/src/main/resources/seamlessportals-ip-client.mixins.json"
+if mix_path.exists():
+    mix = json.loads(mix_path.read_text(encoding="utf-8"))
+    dead = {
+        "client.render.MixinGlCommandEncoder_DrawTrace",
+        "client.render.MixinGlRenderPass_DrawTrace",
+    }
+    mix["client"] = [x for x in mix.get("client", []) if x not in dead]
+    mix_path.write_text(json.dumps(mix, indent=2) + "\n", encoding="utf-8")
+
+for rel in [
+    "common/src/main/java/qouteall/imm_ptl/core/mixin/client/render/MixinGlCommandEncoder_DrawTrace.java",
+    "common/src/main/java/qouteall/imm_ptl/core/mixin/client/render/MixinGlRenderPass_DrawTrace.java",
+]:
+    p = root / rel
+    if p.exists():
+        p.unlink()
+
+# 26.3's RenderPearl GlBackend has no setWindowHints(). SDL GL attributes are now
+# assigned inside createWindow(String,int,int,long), so request stencil immediately
+# before that method sets the rest of the OpenGL attributes and creates the window.
+p = root / "common/src/main/java/com/warwa/seamlessportals/mixin/client/stencil/GlBackendMixin.java"
+if p.exists():
+    t = p.read_text(encoding="utf-8")
+    t = t.replace(
+        "import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;",
+        "import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;"
+    )
+    t = t.replace(
+        '@Inject(method = "setWindowHints", at = @At("TAIL"))',
+        '@Inject(method = "createWindow(Ljava/lang/String;IIJ)J", at = @At("HEAD"))'
+    )
+    t = t.replace(
+        "private void seamlessportals$addStencilBits(CallbackInfo ci) {",
+        "private void seamlessportals$addStencilBits(String title, int width, int height, long flags, CallbackInfoReturnable<Long> cir) {"
+    )
+    t = t.replace(
+        'LOGGER.info("[SEAMLESS STENCIL] Requested 8 stencil bits from GLFW");',
+        'LOGGER.info("[SEAMLESS STENCIL] Requested 8 stencil bits from SDL");'
+    )
+    if "setWindowHints" in t or "CallbackInfo ci" in t:
+        raise SystemExit("26.2 GlBackend stencil injection survived the 26.3 port")
+    p.write_text(t, encoding="utf-8")
+
+# Retire compatibility probes that directly target the removed 26.2 OpenGL implementation.
+# They are diagnostic-only and are not part of portal behavior. The actual Sodium/Iris
+# compatibility mixins remain in place.
+mix_path = root / "common/src/main/resources/seamlessportals-ip-compat.mixins.json"
+if mix_path.exists():
+    mix = json.loads(mix_path.read_text(encoding="utf-8"))
+    dead = {
+        "sodium.MixinSodiumProbe_ShaderSources",
+        "sodium.MixinSodiumProbe_GlCommandEncoder",
+        "sodium.MixinSodiumFullbrightProbe_GlCommandEncoder",
+        "sodium.MixinSodiumChunkRenderList_Probe",
+        "iris.MixinIrisHandDrawState_GlCommandEncoder",
+        "iris.MixinIrisCompositeRenderer_Census",
+        "iris.MixinIrisCompositeRenderer_CensusPostWrite",
+        "iris.MixinIrisProgram_Census",
+    }
+    mix["client"] = [x for x in mix.get("client", []) if x not in dead]
+    mix_path.write_text(json.dumps(mix, indent=2) + "\n", encoding="utf-8")
+
+# Sodium's functional clip-source patch used the same removed ShaderManager inner cache.
+# Retarget it to the 26.3 ShaderManager.Configs implementation.
+p = root / "common/src/main/java/qouteall/imm_ptl/core/compat/mixin/sodium/MixinSodiumShaderManagerCompilationCache_ClipSourcePatch.java"
+if p.exists():
+    t = p.read_text(encoding="utf-8")
+    t = t.replace(
+        '@Mixin(targets = "net/minecraft/client/renderer/ShaderManager$CompilationCache")',
+        '@Mixin(targets = "net/minecraft/client/renderer/ShaderManager$Configs")'
+    )
+    t = t.replace(
+        'method = "getShaderSource(Lnet/minecraft/resources/Identifier;Lcom/mojang/blaze3d/shaders/ShaderType;)Ljava/lang/String;"',
+        'method = "getShader(Lnet/minecraft/resources/Identifier;Lcom/mojang/renderpearl/api/pipeline/ShaderType;)Ljava/lang/String;"'
+    )
+    p.write_text(t, encoding="utf-8")
+
 print("Applied Minecraft 26.3 baseline patch")
