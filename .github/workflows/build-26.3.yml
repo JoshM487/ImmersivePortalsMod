@@ -118,6 +118,38 @@ jobs:
           chmod +x gradlew
           ./gradlew :fabric:build --stacktrace --console=plain
 
+      - name: Install headless client runtime
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb xauth libgl1-mesa-dri
+
+      - name: Runtime client smoke test
+        working-directory: upstream
+        run: |
+          set -uo pipefail
+          rm -f client-smoke.log
+          set +e
+          timeout --signal=TERM 120s xvfb-run -a ./gradlew :fabric:runClient --stacktrace --console=plain 2>&1 | tee client-smoke.log
+          status=${PIPESTATUS[0]}
+          set -e
+
+          if grep -Eq 'MixinApplyError|InvalidMixinException|Mixin transformation .* failed|Exception in thread "main"|Could not execute entrypoint|org\.spongepowered\.asm\.mixin\.throwables' client-smoke.log; then
+            echo "Runtime smoke detected a Mixin/bootstrap crash."
+            exit 1
+          fi
+
+          if [ "$status" -ne 0 ] && [ "$status" -ne 124 ] && [ "$status" -ne 143 ]; then
+            echo "Client exited unexpectedly with status $status"
+            exit "$status"
+          fi
+
+          if ! grep -Eq '\[Render thread/INFO\]|Render thread' client-smoke.log; then
+            echo "Client never reached the render thread."
+            exit 1
+          fi
+
+          echo "Client reached normal render-thread startup without a Mixin/bootstrap crash."
+
       - name: Upload production jars
         if: always()
         uses: actions/upload-artifact@v4
