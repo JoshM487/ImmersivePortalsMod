@@ -1348,4 +1348,32 @@ if p.exists():
     t = re.sub(r"(savedLevelGameTime,\s*)deltaTracker,", r"\1partialTick,", t)
     p.write_text(t, encoding="utf-8")
 
+
+# --- 26.3 catch the commented full-pipeline render call ---
+p = root / "common/src/main/java/qouteall/imm_ptl/core/render/SecondaryWorldRenderCore.java"
+if p.exists():
+    t = p.read_text(encoding="utf-8")
+    t = re.sub(
+        r"destRenderer\.render\(\s*GraphicsResourceAllocator\.UNPOOLED,\s*deltaTracker,\s*"
+        r"(destRenderOutline|renderOutline|false),\s*destCameraState,\s*"
+        r"(?:/\*.*?\*/\s*|//[^\n]*\n\s*)*destDrawViewMatrix,\s*"
+        r"destFogBuffer,\s*destFogData\.color,\s*"
+        r"(WorldRenderInfo\.getTopRenderInfo\(\)\.doRenderSky|true)\s*\);",
+        lambda m: """destRenderer.render(
+                GraphicsResourceAllocator.UNPOOLED,
+                %s,
+                destCameraState,
+                destFogBuffer,
+                destFogData.color,
+                %s,
+                false
+            );""" % (m.group(1), m.group(2)),
+        t,
+        flags=re.S
+    )
+    # Hard assertion: no 26.2 render signature may survive this port script.
+    if re.search(r"destRenderer\.render\(\s*GraphicsResourceAllocator\.UNPOOLED,\s*deltaTracker,", t, flags=re.S):
+        raise SystemExit("A 26.2 LevelRenderer.render signature survived the 26.3 port")
+    p.write_text(t, encoding="utf-8")
+
 print("Applied Minecraft 26.3 baseline patch")
