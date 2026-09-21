@@ -150,6 +150,13 @@ jobs:
 
           echo "Client reached normal render-thread startup without a Mixin/bootstrap crash."
 
+      - name: Portal crossing gametest
+        working-directory: upstream
+        run: |
+          set -o pipefail
+          timeout --signal=TERM 360s xvfb-run -a ./gradlew :fabric:runCrossingGametest -PdisableAperturePassthrough=true --stacktrace --console=plain 2>&1 | tee crossing-smoke.log
+          grep -F "[CROSSING SMOKE] ALL LEGS PASS" crossing-smoke.log
+
       - name: Upload production jars
         if: always()
         uses: actions/upload-artifact@v4
