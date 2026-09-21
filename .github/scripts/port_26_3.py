@@ -1376,4 +1376,21 @@ if p.exists():
         raise SystemExit("A 26.2 LevelRenderer.render signature survived the 26.3 port")
     p.write_text(t, encoding="utf-8")
 
+
+# --- 26.3 retire legacy raw-buffer chunk overloads cleanly ---
+for rel in [
+    "common/src/main/java/com/warwa/seamlessportals/client/SeamlessClientChunkMap.java",
+    "common/src/main/java/qouteall/imm_ptl/core/chunk_loading/ImmPtlClientChunkMap.java",
+]:
+    p = root / rel
+    if not p.exists():
+        continue
+    t = p.read_text(encoding="utf-8")
+    t = port263_replace_method(
+        t,
+        "    public @Nullable LevelChunk replaceWithPacketData(\n",
+        "        // 26.3 removed raw FriendlyByteBuf chunk decode; packet-data overload is authoritative.\n        return null;"
+    )
+    p.write_text(t, encoding="utf-8")
+
 print("Applied Minecraft 26.3 baseline patch")
