@@ -277,6 +277,10 @@ for src_root in source_roots:
     for p in src_root.rglob("*.java"):
         text = p.read_text(encoding="utf-8")
         new_text = text.replace(
+            "com.mojang.blaze3d.systems.RenderSystem.getDevice().backend",
+            "((com.mojang.renderpearl.frontend.FrontendGpuDevice) com.mojang.blaze3d.systems.RenderSystem.getDevice()).backend"
+        )
+        new_text = new_text.replace(
             "RenderSystem.getDevice().backend",
             "((com.mojang.renderpearl.frontend.FrontendGpuDevice) RenderSystem.getDevice()).backend"
         )
