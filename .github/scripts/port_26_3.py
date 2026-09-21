@@ -1418,8 +1418,10 @@ if p.exists():
         'method = "getShaderSource(Lnet/minecraft/resources/Identifier;Lcom/mojang/blaze3d/shaders/ShaderType;)Ljava/lang/String;"',
         'method = "getShader(Lnet/minecraft/resources/Identifier;Lcom/mojang/renderpearl/api/pipeline/ShaderType;)Ljava/lang/String;"'
     )
-    if 'ShaderManager$CompilationCache' in t or 'getShaderSource(' in t:
+    if '@Mixin(targets = "net/minecraft/client/renderer/ShaderManager$CompilationCache")' in t:
         raise SystemExit("26.2 ShaderManager mixin target survived 26.3 port")
+    if 'method = "getShaderSource(' in t:
+        raise SystemExit("26.2 ShaderManager method target survived 26.3 port")
     p.write_text(t, encoding="utf-8")
 
 print("Applied Minecraft 26.3 baseline patch")
