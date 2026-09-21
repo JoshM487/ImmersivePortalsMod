@@ -950,4 +950,144 @@ p = root / "common/src/main/java/com/warwa/seamlessportals/mixin/client/ChunkPac
 if p.exists():
     p.unlink()
 
+
+# --- 26.3 exact API reconciliation, pass 3 ---
+
+# Player-action packet stayed a class in 26.3; keep getSequence(). SwingAnimation moved to item components.
+p = root / "common/src/main/java/qouteall/imm_ptl/core/block_manipulation/BlockManipulationServer.java"
+if p.exists():
+    t = p.read_text(encoding="utf-8")
+    # Only ServerboundPlayerActionPacket sites should use getSequence; use-item packet remains sequence().
+    t = t.replace("world.getMaxY(), packet.sequence()", "world.getMaxY(), packet.getSequence()")
+    t = t.replace("ackBlockChangesUpTo(packet.sequence())", "ackBlockChangesUpTo(packet.getSequence())")
+    t = t.replace(
+        "net.minecraft.world.entity.SwingAnimation.DEFAULT",
+        "net.minecraft.world.item.component.SwingAnimation.DEFAULT"
+    )
+    p.write_text(t, encoding="utf-8")
+
+# Patch every Sodium destination-arm implementation, not only the first anonymous implementation.
+p = root / "common/src/main/java/qouteall/imm_ptl/core/compat/sodium_compatibility/SodiumInterface.java"
+if p.exists():
+    t = p.read_text(encoding="utf-8")
+    marker3 = "        public boolean ip_armDestChunkRenders("
+    search_from = 0
+    while True:
+        a = t.find(marker3, search_from)
+        if a < 0:
+            break
+        brace = t.find("{", a)
+        depth = 0
+        end = None
+        for i in range(brace, len(t)):
+            if t[i] == "{":
+                depth += 1
+            elif t[i] == "}":
+                depth -= 1
+                if depth == 0:
+                    end = i + 1
+                    break
+        if end is None:
+            raise SystemExit("Could not close ip_armDestChunkRenders")
+        header = t[a:brace + 1]
+        replacement = header + "\n            return false;\n        }"
+        t = t[:a] + replacement + t[end:]
+        search_from = a + len(replacement)
+    p.write_text(t, encoding="utf-8")
+
+# 26.3 createPlayer carries ItemActivation through respawns. Update both redirect descriptors and calls.
+p = root / "common/src/main/java/com/warwa/seamlessportals/mixin/client/HandleRespawnMixin.java"
+if p.exists():
+    t = p.read_text(encoding="utf-8")
+    t = t.replace(
+        '"Lnet/minecraft/world/entity/player/Input;Z)"',
+        '"Lnet/minecraft/world/entity/player/Input;Z"\n'
+        '                + "Lnet/minecraft/client/player/ItemActivation;)"'
+    )
+    # The previous string assembly can vary; normalize the exact descriptor fragment if it remained.
+    t = t.replace(
+        '+ "Lnet/minecraft/world/entity/player/Input;Z)"\n                + "Lnet/minecraft/client/player/LocalPlayer;"',
+        '+ "Lnet/minecraft/world/entity/player/Input;Z"\n'
+        '                + "Lnet/minecraft/client/player/ItemActivation;)"\n'
+        '                + "Lnet/minecraft/client/player/LocalPlayer;"'
+    )
+    t = t.replace(
+        """            Input lastSentInput,
+            boolean wasSprinting) {""",
+        """            Input lastSentInput,
+            boolean wasSprinting,
+            net.minecraft.client.player.ItemActivation itemActivation) {"""
+    )
+    t = t.replace(
+        "return gameMode.createPlayer(level, stats, recipeBook, lastSentInput, wasSprinting);",
+        "return gameMode.createPlayer(level, stats, recipeBook, lastSentInput, wasSprinting, itemActivation);"
+    )
+    t = t.replace(
+        '+ "Lnet/minecraft/client/ClientRecipeBook;)"',
+        '+ "Lnet/minecraft/client/ClientRecipeBook;"\n'
+        '                + "Lnet/minecraft/client/player/ItemActivation;)"'
+    )
+    t = t.replace(
+        """            StatsCounter stats,
+            ClientRecipeBook recipeBook) {""",
+        """            StatsCounter stats,
+            ClientRecipeBook recipeBook,
+            net.minecraft.client.player.ItemActivation itemActivation) {"""
+    )
+    t = t.replace(
+        "return gameMode.createPlayer(level, stats, recipeBook);",
+        "return gameMode.createPlayer(level, stats, recipeBook, itemActivation);"
+    )
+    p.write_text(t, encoding="utf-8")
+
+# Raw section-buffer prefeed was removed from ClientChunkCache. Those sites are only warm-up paths;
+# let the redirected vanilla ClientboundLevelChunk packet populate the destination cache instead.
+for rel in [
+    "common/src/main/java/com/warwa/seamlessportals/client/PortalWorldManager.java",
+    "common/src/main/java/com/warwa/seamlessportals/client/PortalDimensionManager.java",
+    "common/src/main/java/com/warwa/seamlessportals/mixin/client/HandleRespawnMixin.java",
+]:
+    p = root / rel
+    if not p.exists():
+        continue
+    t = p.read_text(encoding="utf-8")
+    t = re.sub(
+        r"cache\.replaceWithPacketData\(\s*chunkX,\s*chunkZ,\s*(?:buf|chunkPacket),\s*java\.util\.Collections\.emptyMap\(\),\s*tag\s*->\s*\{\}\s*\);",
+        "/* 26.3: raw chunk prefeed removed; redirected vanilla packet owns cache population. */",
+        t,
+        flags=re.S
+    )
+    t = re.sub(
+        r"cache\.replaceWithPacketData\(\s*pos\.x\(\),\s*pos\.z\(\),\s*buf,\s*java\.util\.Collections\.emptyMap\(\),\s*tag\s*->\s*\{\}\s*\);",
+        "/* 26.3: raw chunk prefeed removed; server packet will refill this chunk. */",
+        t,
+        flags=re.S
+    )
+    p.write_text(t, encoding="utf-8")
+
+# PreparedRenderType now consumes a StagedVertexBuffer.ExecuteInfo plus an explicit RenderPass.
+p = root / "common/src/main/java/com/warwa/seamlessportals/render/PortalRenderTypes.java"
+if p.exists():
+    t = p.read_text(encoding="utf-8")
+    old = """                renderType.prepare().drawFromBuffer(
+                    vertexBuffer, indexBuffer, indexType, 0, 0, indexCount);"""
+    new = """                var info = new net.minecraft.client.renderer.StagedVertexBuffer.ExecuteInfo(
+                    vertexBuffer, indexBuffer, indexType, 0, 0, indexCount,
+                    drawState.primitiveTopology()
+                );
+                var target = net.minecraft.client.Minecraft.getInstance().gameRenderer.mainRenderTarget();
+                var descriptorBuilder = com.mojang.renderpearl.api.commands.RenderPassDescriptor
+                    .builder(() -> "seamlessportals immediate mesh")
+                    .withColorAttachment(java.util.Objects.requireNonNull(target.getColorTextureView()));
+                if (target.getDepthTextureView() != null) {
+                    descriptorBuilder.withDepthAttachment(target.getDepthTextureView());
+                }
+                try (var pass = RenderSystem.getDevice().createCommandEncoder()
+                    .createRenderPass(descriptorBuilder.build())) {
+                    renderType.prepare().drawFromBuffer(info, pass);
+                }"""
+    if old in t:
+        t = t.replace(old, new)
+    p.write_text(t, encoding="utf-8")
+
 print("Applied Minecraft 26.3 baseline patch")
