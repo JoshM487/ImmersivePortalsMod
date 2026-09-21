@@ -1424,4 +1424,41 @@ if p.exists():
         raise SystemExit("26.2 ShaderManager method target survived 26.3 port")
     p.write_text(t, encoding="utf-8")
 
+
+# --- 26.3 runtime mixins: RenderPearl OpenGL backend migration ---
+p = root / "common/src/main/java/com/warwa/seamlessportals/mixin/client/GlCommandEncoderClipMixin.java"
+if p.exists():
+    t = p.read_text(encoding="utf-8")
+    t = t.replace(
+        'import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;',
+        'import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;'
+    )
+    t = t.replace(
+        '@Mixin(targets = "com/mojang/blaze3d/opengl/GlCommandEncoder")',
+        '@Mixin(targets = "com/mojang/renderpearl/backend/opengl/GlCommandEncoder")'
+    )
+    t = t.replace(
+        'method = "trySetup(Lcom/mojang/blaze3d/opengl/GlRenderPass;Ljava/util/Collection;)Z",\n        at = @At("RETURN"),',
+        'method = "setupDraw(Lcom/mojang/renderpearl/backend/opengl/GlRenderPass;)V",\n        at = @At("TAIL"),'
+    )
+    t = t.replace(
+        'private void seamlessportals$uploadClipPlaneAtReturn(CallbackInfoReturnable<Boolean> cir) {\n'
+        '        // Only when trySetup succeeded — false returns mean no draw will happen.\n'
+        '        if (Boolean.FALSE.equals(cir.getReturnValue())) return;',
+        'private void seamlessportals$uploadClipPlaneAtReturn(CallbackInfo ci) {'
+    )
+    if 'com/mojang/blaze3d/opengl/GlCommandEncoder' in t:
+        raise SystemExit("26.2 GlCommandEncoder mixin target survived")
+    if 'trySetup(Lcom/mojang/blaze3d/opengl/GlRenderPass' in t:
+        raise SystemExit("26.2 GlCommandEncoder injection survived")
+    p.write_text(t, encoding="utf-8")
+
+# 26.3 no longer has GlDevice.clearPipelineCache. Per-program GlProgram.close()
+# invalidation remains and is the universal deletion seam, so retire only the obsolete bulk-clear mixin.
+mix_path = root / "common/src/main/resources/seamlessportals-common.mixins.json"
+if mix_path.exists():
+    mix = json.loads(mix_path.read_text(encoding="utf-8"))
+    mix["client"] = [x for x in mix.get("client", []) if x != "client.GlDeviceClipCacheMixin"]
+    mix_path.write_text(json.dumps(mix, indent=2) + "\n", encoding="utf-8")
+
 print("Applied Minecraft 26.3 baseline patch")
