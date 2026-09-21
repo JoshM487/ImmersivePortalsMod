@@ -1090,4 +1090,205 @@ if p.exists():
         t = t.replace(old, new)
     p.write_text(t, encoding="utf-8")
 
+
+# --- 26.3 renderer convergence: keep full LevelRenderer/FBO path, retire removed manual subpasses ---
+
+def port263_replace_method(src, marker_text, body_text):
+    start = src.find(marker_text)
+    if start < 0:
+        return src
+    brace = src.find("{", start)
+    if brace < 0:
+        raise SystemExit(f"Missing brace for {marker_text}")
+    depth = 0
+    end = None
+    for i in range(brace, len(src)):
+        if src[i] == "{":
+            depth += 1
+        elif src[i] == "}":
+            depth -= 1
+            if depth == 0:
+                end = i + 1
+                break
+    if end is None:
+        raise SystemExit(f"Unclosed method {marker_text}")
+    header = src[start:brace + 1]
+    return src[:start] + header + "\n" + body_text + "\n    }" + src[end:]
+
+# Correct the one use-item ack that the class-vs-record split left behind.
+p = root / "common/src/main/java/qouteall/imm_ptl/core/block_manipulation/BlockManipulationServer.java"
+if p.exists():
+    t = p.read_text(encoding="utf-8")
+    # ServerboundUseItemOnPacket is a record in 26.3.
+    t = t.replace("ackBlockChangesUpTo(packet.getSequence())", "ackBlockChangesUpTo(packet.sequence())")
+    # The destroy-action packet is still a normal class.
+    t = t.replace("world.getMaxY(), packet.sequence()", "world.getMaxY(), packet.getSequence()")
+    p.write_text(t, encoding="utf-8")
+
+# SecondaryWorldRenderCore: the selected 26.3 route is renderDestWorldFullPipeline.
+# Update that route to current signatures; old decomposed helper subpasses are now dead.
+p = root / "common/src/main/java/qouteall/imm_ptl/core/render/SecondaryWorldRenderCore.java"
+if p.exists():
+    t = p.read_text(encoding="utf-8")
+    t = t.replace(
+        "newCamera.extractRenderState(destCameraState, partialTick);",
+        "newCamera.extractRenderState(destCameraState, deltaTracker);"
+    )
+    t = t.replace("destLevel.getGameTime(), deltaTracker,", "destLevel.getGameTime(), partialTick,")
+    t = t.replace("savedLevelGameTime, deltaTracker,", "savedLevelGameTime, partialTick,")
+
+    old_render = """destRenderer.render(
+                GraphicsResourceAllocator.UNPOOLED,
+                deltaTracker,
+                renderOutline,
+                destCameraState,
+                destDrawViewMatrix,
+                destFogBuffer,
+                destFogData.color,
+                true
+            );"""
+    new_render = """destRenderer.render(
+                GraphicsResourceAllocator.UNPOOLED,
+                renderOutline,
+                destCameraState,
+                destFogBuffer,
+                destFogData.color,
+                true,
+                false
+            );"""
+    t = t.replace(old_render, new_render)
+
+    # A second formatting variant exists in the inherited full-pipeline source.
+    t = re.sub(
+        r"destRenderer\.render\(\s*GraphicsResourceAllocator\.UNPOOLED,\s*deltaTracker,\s*"
+        r"(?:renderOutline|false),\s*destCameraState,\s*(?:destDrawViewMatrix|destViewMatrix),\s*"
+        r"destFogBuffer,\s*destFogData\.color,\s*true\s*\);",
+        """destRenderer.render(
+                GraphicsResourceAllocator.UNPOOLED,
+                false,
+                destCameraState,
+                destFogBuffer,
+                destFogData.color,
+                true,
+                false
+            );""",
+        t,
+        flags=re.S
+    )
+
+    # These methods implement the removed 26.2 decomposed/manual renderer. The full renderer
+    # above now owns sky/cloud/weather/entity passes on 26.3.
+    for meth in [
+        "    private static void renderPortalSky(",
+        "    private static void renderPortalClouds(",
+        "    private static void renderPortalWeather(",
+        "    private static void renderPortalEntities(",
+        "    private static void renderPortalEntitiesSameDim(",
+    ]:
+        t = port263_replace_method(t, meth, "        // 26.3: handled by the full LevelRenderer pipeline.")
+    p.write_text(t, encoding="utf-8")
+
+# Per-entity deferred feature replay depended on the 26.2 SubmitNodeStorage execution API.
+# Keep collection/clip state intact but disable the old replay primitive for the first 26.3 build.
+p = root / "common/src/main/java/qouteall/imm_ptl/core/render/PerEntityClipBracket.java"
+if p.exists():
+    t = p.read_text(encoding="utf-8")
+    t = port263_replace_method(
+        t,
+        "    public static void drawBracketedEntitiesIfAny(",
+        "        // 26.3: entity features are executed by the full FeatureRenderDispatcher frame."
+    )
+    t = port263_replace_method(
+        t,
+        "    public static boolean drawImmediateClipped(",
+        "        // 26.3: legacy immediate feature replay disabled; full renderer owns execution.\n        return false;"
+    )
+    p.write_text(t, encoding="utf-8")
+
+# PortalContextSwitch's FBO path remains useful on 26.3. Its stencil-direct mode, however,
+# depended on private ChunkSectionsToRender internals removed in 26.3. Disable only direct mode.
+p = root / "common/src/main/java/com/warwa/seamlessportals/render/PortalContextSwitch.java"
+if p.exists():
+    t = p.read_text(encoding="utf-8")
+
+    t = port263_replace_method(
+        t,
+        "    public static boolean renderDestinationDirect(",
+        "        // 26.3: use the FBO/full-LevelRenderer route; direct chunk subpasses were removed upstream.\n        return false;"
+    )
+
+    # Direct-only helper methods are no longer reachable.
+    for meth in [
+        "    private static void renderPortalSky(",
+        "    private static void renderPortalClouds(",
+        "    private static void renderPortalEntities(",
+    ]:
+        t = port263_replace_method(t, meth, "        // 26.3: handled by LevelRenderer.render().")
+
+    t = t.replace(
+        "virtualCamera.extractRenderState(destCameraState, partialTick);",
+        "virtualCamera.extractRenderState(destCameraState, deltaTracker);"
+    )
+    t = t.replace("destLevel.getGameTime(), deltaTracker,", "destLevel.getGameTime(), partialTick,")
+    t = t.replace("savedLevelGameTime, deltaTracker,", "savedLevelGameTime, partialTick,")
+
+    # The precomputed ChunkSectionsToRender block existed only for the removed direct path and
+    # debug counters. FBO mode lets LevelRenderer prepare/compile/upload its own terrain.
+    start_marker = "                    // 26.2: ChunkSectionsToRender is produced by"
+    end_marker = "                    // Inner clip plane"
+    if start_marker in t:
+        a = t.index(start_marker)
+        b = t.index(end_marker, a)
+        t = t[:a] + """                    // 26.3: LevelRenderer owns chunk preparation and uploads.
+                    GL11.glDisable(GL11.GL_STENCIL_TEST);
+""" + t[b:]
+
+    # This explicit Sodium re-point targeted the precomputed direct-path chunk object and was
+    # already documented as redundant under the renderer's own Sodium wrap.
+    t = re.sub(
+        r"\s*com\.warwa\.seamlessportals\.compat\.SodiumBridge\s*"
+        r"\.updateChunkSectionsRenderer\(\s*destChunks,\s*destRenderer,\s*"
+        r"destCameraState\.projectionMatrix,\s*destViewMatrix,\s*"
+        r"destCameraPos\.x,\s*destCameraPos\.y,\s*destCameraPos\.z\);",
+        "",
+        t,
+        flags=re.S
+    )
+
+    # Replace the remaining direct-vs-FBO draw fork with the native 26.3 full render.
+    direct_comment = "// Phase 5 STEP 1: draw the dest terrain DIRECTLY"
+    if direct_comment in t:
+        comment_pos = t.index(direct_comment)
+        if_pos = t.rfind("if (stencilDirectMode) {", 0, comment_pos)
+        finally_marker = "\n                            } finally {\n                                com.warwa.seamlessportals.render.SodiumFogOverride.clear();"
+        fin = t.index(finally_marker, comment_pos)
+        replacement = """destRenderer.render(
+                                    GraphicsResourceAllocator.UNPOOLED,
+                                    false,
+                                    destCameraState,
+                                    destFogBuffer,
+                                    destFogData.color,
+                                    true,
+                                    false
+                                );"""
+        t = t[:if_pos] + replacement + t[fin:]
+
+    # Any inherited old-signature FBO render that remains gets the same 26.3 signature.
+    t = re.sub(
+        r"destRenderer\.render\(\s*GraphicsResourceAllocator\.UNPOOLED,\s*deltaTracker,\s*false,\s*"
+        r"destCameraState,\s*destViewMatrix,\s*destFogBuffer,\s*destFogData\.color,\s*true\s*\);",
+        """destRenderer.render(
+                                    GraphicsResourceAllocator.UNPOOLED,
+                                    false,
+                                    destCameraState,
+                                    destFogBuffer,
+                                    destFogData.color,
+                                    true,
+                                    false
+                                );""",
+        t,
+        flags=re.S
+    )
+    p.write_text(t, encoding="utf-8")
+
 print("Applied Minecraft 26.3 baseline patch")
