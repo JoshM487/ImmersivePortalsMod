@@ -282,4 +282,23 @@ for src_root in source_roots:
         )
         if new_text != text:
             p.write_text(new_text, encoding="utf-8")
+
+# 26.3's OIT/framegraph no longer has the 26.2 decomposed stage-target model.
+# Use the port's existing full LevelRenderer pipeline path for all destination renders.
+swrc = root / "common/src/main/java/qouteall/imm_ptl/core/render/SecondaryWorldRenderCore.java"
+sw = swrc.read_text(encoding="utf-8")
+method_start = sw.index("    public static void renderDestWorld(")
+full_pipeline_marker = sw.index("    // migration/IRIS_SHADERS_ON_DESIGN.md", method_start)
+replacement = """    public static void renderDestWorld(
+        ClientLevel destLevel, LevelRenderer destRenderer, Camera newCamera, int renderDistance,
+        ClientLevel sourceLevel, Camera sourceCamera
+    ) {
+        renderDestWorldFullPipeline(
+            destLevel, destRenderer, newCamera, renderDistance, sourceLevel, sourceCamera
+        );
+    }
+
+"""
+sw = sw[:method_start] + replacement + sw[full_pipeline_marker:]
+swrc.write_text(sw, encoding="utf-8")
 print("Applied Minecraft 26.3 baseline patch")
