@@ -1582,4 +1582,25 @@ if mix_path.exists():
             mix[key] = [x for x in arr if not x.startswith("passthrough.")]
     mix_path.write_text(json.dumps(mix, indent=2) + "\n", encoding="utf-8")
 
+
+# --- 26.3 EntityRenderer culling box gained partialTicks ---
+p = root / "common/src/main/java/com/warwa/seamlessportals/mixin/client/EntityRendererCullingBoxInvoker.java"
+if p.exists():
+    t = p.read_text(encoding="utf-8")
+    t = t.replace(
+        "AABB seamlessportals$getBoundingBoxForCulling(Entity entity);",
+        "AABB seamlessportals$getBoundingBoxForCulling(Entity entity, float partialTicks);"
+    )
+    p.write_text(t, encoding="utf-8")
+
+p = root / "common/src/main/java/com/warwa/seamlessportals/passthrough/SeamRenderExtent.java"
+if p.exists():
+    t = p.read_text(encoding="utf-8")
+    t = t.replace(
+        "renderer).seamlessportals$getBoundingBoxForCulling(entity);",
+        "renderer).seamlessportals$getBoundingBoxForCulling("
+        "entity, mc.getDeltaTracker().getGameTimeDeltaPartialTick(false));"
+    )
+    p.write_text(t, encoding="utf-8")
+
 print("Applied Minecraft 26.3 baseline patch")
