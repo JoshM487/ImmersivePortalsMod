@@ -2,7 +2,7 @@ name: Build 26.3
 
 on:
   push:
-    branches: [ "mc26.3-port" ]
+    branches: [ "mc26.3-port", "main" ]
   workflow_dispatch:
 
 jobs:
@@ -23,6 +23,25 @@ jobs:
 
       - name: Apply 26.3 port patches
         run: python3 .github/scripts/port_26_3.py upstream
+
+      - name: Fix 26.3 ShaderManager mixin target
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("upstream/common/src/main/java/com/warwa/seamlessportals/mixin/client/ShaderManagerCompilationCacheMixin.java")
+          s = p.read_text(encoding="utf-8")
+          s = s.replace(
+              '@Mixin(targets = "net/minecraft/client/renderer/ShaderManager$CompilationCache")',
+              '@Mixin(targets = "net/minecraft/client/renderer/ShaderManager$Configs")'
+          )
+          s = s.replace(
+              'method = "getShaderSource(Lnet/minecraft/resources/Identifier;Lcom/mojang/blaze3d/shaders/ShaderType;)Ljava/lang/String;"',
+              'method = "getShader(Lnet/minecraft/resources/Identifier;Lcom/mojang/renderpearl/api/pipeline/ShaderType;)Ljava/lang/String;"'
+          )
+          if 'ShaderManager$CompilationCache' in s or 'getShaderSource(' in s:
+              raise SystemExit("old 26.2 ShaderManager mixin target survived")
+          p.write_text(s, encoding="utf-8")
+          PY
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
