@@ -267,8 +267,8 @@ extra_aw = [
 ]
 for line in extra_aw:
     if line not in aws:
-        aws += "\\n" + line
-aw.write_text(aws + ("\\n" if not aws.endswith("\\n") else ""), encoding="utf-8")
+        aws += "\n" + line
+aw.write_text(aws + ("\n" if not aws.endswith("\n") else ""), encoding="utf-8")
 
 # GpuDevice is now an interface backed by FrontendGpuDevice; reach the widened backend field.
 for src_root in source_roots:
