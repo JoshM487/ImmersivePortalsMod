@@ -1569,4 +1569,17 @@ if p.exists():
     )
     p.write_text(t, encoding="utf-8")
 
+
+# --- 26.3 core release: disable the 26.2-only seam passthrough/redstone/rail mixin family ---
+# This is an optional SeamlessPortals extension, not the core Immersive Portals render/teleport path.
+# Several members inject into 26.2 RedstoneWire/Rail internals that were structurally rewritten in 26.3.
+mix_path = root / "common/src/main/resources/seamlessportals-common.mixins.json"
+if mix_path.exists():
+    mix = json.loads(mix_path.read_text(encoding="utf-8"))
+    for key in ("mixins", "client", "server"):
+        arr = mix.get(key)
+        if isinstance(arr, list):
+            mix[key] = [x for x in arr if not x.startswith("passthrough.")]
+    mix_path.write_text(json.dumps(mix, indent=2) + "\n", encoding="utf-8")
+
 print("Applied Minecraft 26.3 baseline patch")
