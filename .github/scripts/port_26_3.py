@@ -510,4 +510,123 @@ if rus.exists():
     rus.write_text(t, encoding="utf-8")
 
 
+
+
+# Re-create the removed diagnostics as API-compatible inert stubs. Their call sites are
+# intentionally left intact, but the production 26.3 build must not depend on private
+# RenderPearl backend implementation details.
+def write_stub(rel, body):
+    p = root / rel
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(body, encoding="utf-8")
+
+write_stub("common/src/main/java/qouteall/imm_ptl/core/render/DrawCallTrace.java", """package qouteall.imm_ptl.core.render;
+public final class DrawCallTrace {
+    public static boolean armed = false;
+    public static boolean capturing = false;
+    private DrawCallTrace() {}
+    public static void record(Object... args) {}
+    public static void recordSkyState(Object... args) {}
+    public static void onFrameStart(Object... args) {}
+    public static void onFrameEnd(Object... args) {}
+    public static String mvTop() { return ""; }
+}
+""")
+
+write_stub("common/src/main/java/qouteall/imm_ptl/core/render/StageCensusProbe.java", """package qouteall.imm_ptl.core.render;
+public final class StageCensusProbe {
+    public static final boolean ENABLED = false;
+    private StageCensusProbe() {}
+    public static void passTiming(Object... args) {}
+    public static void cloud(Object... args) {}
+    public static void endFrame(Object... args) {}
+    public static void mainClouds(Object... args) {}
+    public static void markTeleport(Object... args) {}
+    public static void entityRingSample(Object... args) {}
+}
+""")
+
+write_stub("common/src/main/java/qouteall/imm_ptl/core/render/TeleportFlashProbe.java", """package qouteall.imm_ptl.core.render;
+public final class TeleportFlashProbe {
+    public static long destPassesThisFrame;
+    public static long sameDimPassesThisFrame;
+    public static long sameDimMaxLayerThisFrame;
+    public static long sameDimEntitiesExtracted;
+    public static long sameDimEntitiesSubmitted;
+    public static long sameDimEntityThrow;
+    public static long foldSchedMainThisFrame;
+    public static long foldSchedDestThisFrame;
+    public static long promoteNanosThisFrame;
+    public static long destPassNanosThisFrame;
+    public static long discoveryNanosThisFrame;
+    public static long vanillaYieldThisFrame;
+    public static long portalSkyDrawsThisFrame;
+    public static long skyDrawsThisFrame;
+    public static long skyTargetHashA;
+    public static long skyTargetHashB;
+    private TeleportFlashProbe() {}
+    public static void armOnPromote(Object... args) {}
+    public static void armManual(Object... args) {}
+    public static void onFrameEnd(Object... args) {}
+}
+""")
+
+write_stub("common/src/main/java/qouteall/imm_ptl/core/compat/iris_compatibility/ShaderpackViewsProbe.java", """package qouteall.imm_ptl.core.compat.iris_compatibility;
+public final class ShaderpackViewsProbe {
+    private ShaderpackViewsProbe() {}
+    public static void onPostLevelAnchor(Object... args) {}
+}
+""")
+
+write_stub("common/src/main/java/com/warwa/seamlessportals/render/SeamHandStageDiff.java", """package com.warwa.seamlessportals.render;
+public final class SeamHandStageDiff {
+    private SeamHandStageDiff() {}
+    public static void stageA(Object... args) {}
+    public static void stageB(Object... args) {}
+    public static void stageC(Object... args) {}
+    public static void stageD(Object... args) {}
+}
+""")
+
+write_stub("common/src/main/java/com/warwa/seamlessportals/render/SeamDestContentProbe.java", """package com.warwa.seamlessportals.render;
+public final class SeamDestContentProbe {
+    private SeamDestContentProbe() {}
+    public static void sample(Object... args) {}
+}
+""")
+
+write_stub("common/src/main/java/com/warwa/seamlessportals/render/SeamHandLocator.java", """package com.warwa.seamlessportals.render;
+public final class SeamHandLocator {
+    private SeamHandLocator() {}
+    public static void anchor(Object... args) {}
+    public static void preSolid(Object... args) {}
+    public static void postSolid(Object... args) {}
+    public static void postBlit(Object... args) {}
+}
+""")
+
+write_stub("common/src/main/java/com/warwa/seamlessportals/render/SeamHandSubmitTap.java", """package com.warwa.seamlessportals.render;
+public final class SeamHandSubmitTap {
+    private SeamHandSubmitTap() {}
+    public static void beginSolid(Object... args) {}
+    public static void endSolid(Object... args) {}
+    public static void beginTranslucent(Object... args) {}
+    public static void endTranslucent(Object... args) {}
+    public static void onCanRender(Object... args) {}
+    public static void onBodyEntered(Object... args) {}
+}
+""")
+
+write_stub("common/src/main/java/com/warwa/seamlessportals/render/SeamHandInLevelProbe.java", """package com.warwa.seamlessportals.render;
+public final class SeamHandInLevelProbe {
+    private SeamHandInLevelProbe() {}
+    public static void anchor(Object... args) {}
+    public static void preSolid(Object... args) {}
+    public static void postSolid(Object... args) {}
+    public static void preTranslucent(Object... args) {}
+    public static void postTranslucent(Object... args) {}
+}
+""")
+
+
 print("Applied Minecraft 26.3 baseline patch")
