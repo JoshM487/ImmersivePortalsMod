@@ -860,12 +860,12 @@ for rel in [
     # Old LevelChunk raw-buffer decode API disappeared. Leave overload for source compatibility only.
     t = re.sub(
         r"worldChunk\.replaceWithPacketData\(buf, heightmaps, consumer\);",
-        r"throw new UnsupportedOperationException(\"26.3 raw chunk decode removed\");",
+        r"throw new UnsupportedOperationException("26.3 raw chunk decode removed");",
         t
     )
     t = re.sub(
         r"chunk\.replaceWithPacketData\(readBuffer, heightmaps, blockEntities\);",
-        r"throw new UnsupportedOperationException(\"26.3 raw chunk decode removed\");",
+        r"throw new UnsupportedOperationException("26.3 raw chunk decode removed");",
         t
     )
     p.write_text(t, encoding="utf-8")
