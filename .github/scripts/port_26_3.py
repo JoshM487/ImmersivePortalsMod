@@ -1291,4 +1291,61 @@ if p.exists():
     )
     p.write_text(t, encoding="utf-8")
 
+
+# --- 26.3 final compile-signature pass ---
+
+p = root / "common/src/main/java/qouteall/imm_ptl/core/block_manipulation/BlockManipulationServer.java"
+if p.exists():
+    t = p.read_text(encoding="utf-8")
+    use_marker = "private static void doProcessUseItemOn("
+    if use_marker in t:
+        a = t.index(use_marker)
+        b = t.index("    public static void", a) if "    public static void" in t[a:] else len(t)
+        before, segment, after = t[:a], t[a:b], t[b:]
+        segment = segment.replace("ackBlockChangesUpTo(packet.getSequence())", "ackBlockChangesUpTo(packet.sequence())")
+        t = before + segment + after
+    # Player-action packet remains getter-based.
+    action_marker = "private static void doProcessPlayerAction("
+    if action_marker in t:
+        a = t.index(action_marker)
+        b = t.index("    public static boolean isAttackingAction", a)
+        seg = t[a:b].replace("packet.sequence()", "packet.getSequence()")
+        t = t[:a] + seg + t[b:]
+    p.write_text(t, encoding="utf-8")
+
+p = root / "common/src/main/java/qouteall/imm_ptl/core/render/SecondaryWorldRenderCore.java"
+if p.exists():
+    t = p.read_text(encoding="utf-8")
+    t = re.sub(r"(destLevel\.getGameTime\(\),\s*)deltaTracker,", r"\1partialTick,", t)
+    t = re.sub(r"(savedLevelGameTime,\s*)deltaTracker,", r"\1partialTick,", t)
+    t = t.replace(
+        """destRenderer.render(
+                GraphicsResourceAllocator.UNPOOLED,
+                deltaTracker,
+                destRenderOutline,
+                destCameraState,
+                destDrawViewMatrix,
+                destFogBuffer,
+                destFogData.color,
+                WorldRenderInfo.getTopRenderInfo().doRenderSky
+            );""",
+        """destRenderer.render(
+                GraphicsResourceAllocator.UNPOOLED,
+                destRenderOutline,
+                destCameraState,
+                destFogBuffer,
+                destFogData.color,
+                WorldRenderInfo.getTopRenderInfo().doRenderSky,
+                false
+            );"""
+    )
+    p.write_text(t, encoding="utf-8")
+
+p = root / "common/src/main/java/com/warwa/seamlessportals/render/PortalContextSwitch.java"
+if p.exists():
+    t = p.read_text(encoding="utf-8")
+    t = re.sub(r"(destLevel\.getGameTime\(\),\s*)deltaTracker,", r"\1partialTick,", t)
+    t = re.sub(r"(savedLevelGameTime,\s*)deltaTracker,", r"\1partialTick,", t)
+    p.write_text(t, encoding="utf-8")
+
 print("Applied Minecraft 26.3 baseline patch")
