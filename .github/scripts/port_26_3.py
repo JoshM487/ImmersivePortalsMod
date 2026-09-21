@@ -1544,4 +1544,29 @@ if p.exists():
     )
     p.write_text(t, encoding="utf-8")
 
+
+# --- 26.3 FireBlock: checkBurnOut now uses setBlockAndUpdate instead of setBlock(flags) ---
+p = root / "common/src/main/java/com/warwa/seamlessportals/mixin/passthrough/FireBlockSeamBreakMixin.java"
+if p.exists():
+    t = p.read_text(encoding="utf-8")
+    t = t.replace(
+        'target = "Lnet/minecraft/world/level/Level;setBlock("\n'
+        '                + "Lnet/minecraft/core/BlockPos;"\n'
+        '                + "Lnet/minecraft/world/level/block/state/BlockState;I)Z"',
+        'target = "Lnet/minecraft/world/level/Level;setBlockAndUpdate("\n'
+        '                + "Lnet/minecraft/core/BlockPos;"\n'
+        '                + "Lnet/minecraft/world/level/block/state/BlockState;)Z"'
+    )
+    t = t.replace(
+        "Level level, BlockPos pos, BlockState state, int flags\n    ) {\n"
+        "        Object[] saved = SeamWriteContext.push(SeamWriteSource.PLAYER_BREAK, pos);\n"
+        "        try {\n"
+        "            return level.setBlock(pos, state, flags);\n",
+        "Level level, BlockPos pos, BlockState state\n    ) {\n"
+        "        Object[] saved = SeamWriteContext.push(SeamWriteSource.PLAYER_BREAK, pos);\n"
+        "        try {\n"
+        "            return level.setBlockAndUpdate(pos, state);\n"
+    )
+    p.write_text(t, encoding="utf-8")
+
 print("Applied Minecraft 26.3 baseline patch")
