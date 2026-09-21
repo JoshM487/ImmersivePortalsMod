@@ -1405,4 +1405,21 @@ if p.exists():
     )
     p.write_text(t, encoding="utf-8")
 
+
+# --- 26.3 runtime mixin: ShaderManager CompilationCache became Configs ---
+p = root / "common/src/main/java/com/warwa/seamlessportals/mixin/client/ShaderManagerCompilationCacheMixin.java"
+if p.exists():
+    t = p.read_text(encoding="utf-8")
+    t = t.replace(
+        '@Mixin(targets = "net/minecraft/client/renderer/ShaderManager$CompilationCache")',
+        '@Mixin(targets = "net/minecraft/client/renderer/ShaderManager$Configs")'
+    )
+    t = t.replace(
+        'method = "getShaderSource(Lnet/minecraft/resources/Identifier;Lcom/mojang/blaze3d/shaders/ShaderType;)Ljava/lang/String;"',
+        'method = "getShader(Lnet/minecraft/resources/Identifier;Lcom/mojang/renderpearl/api/pipeline/ShaderType;)Ljava/lang/String;"'
+    )
+    if 'ShaderManager$CompilationCache' in t or 'getShaderSource(' in t:
+        raise SystemExit("26.2 ShaderManager mixin target survived 26.3 port")
+    p.write_text(t, encoding="utf-8")
+
 print("Applied Minecraft 26.3 baseline patch")
