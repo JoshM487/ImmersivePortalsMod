@@ -280,6 +280,10 @@ for src_root in source_roots:
             "RenderSystem.getDevice().backend",
             "((com.mojang.renderpearl.frontend.FrontendGpuDevice) RenderSystem.getDevice()).backend"
         )
+        new_text = new_text.replace(
+            "com.mojang.blaze3d.systems.((com.mojang.renderpearl.frontend.FrontendGpuDevice) RenderSystem.getDevice()).backend",
+            "((com.mojang.renderpearl.frontend.FrontendGpuDevice) com.mojang.blaze3d.systems.RenderSystem.getDevice()).backend"
+        )
         if new_text != text:
             p.write_text(new_text, encoding="utf-8")
 
