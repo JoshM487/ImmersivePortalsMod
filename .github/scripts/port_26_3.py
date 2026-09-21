@@ -1393,4 +1393,16 @@ for rel in [
     )
     p.write_text(t, encoding="utf-8")
 
+
+# --- 26.3 remove stale alternate-dimension init from Fabric bootstrap ---
+p = root / "fabric/src/main/java/com/warwa/seamlessportals/fabric/SeamlessPortalsModFabric.java"
+if p.exists():
+    t = p.read_text(encoding="utf-8")
+    t = re.sub(
+        r"\s*qouteall\.imm_ptl\.peripheral\.alternate_dimension\.FormulaGenerator\.init\(\);",
+        "",
+        t
+    )
+    p.write_text(t, encoding="utf-8")
+
 print("Applied Minecraft 26.3 baseline patch")
